@@ -5,7 +5,7 @@
     </nav-bar>
     <tab-control class="tab-control" :titles="['流行', '新款', '精选']" @tabClick="tabSwitch"
        ref="tabcontrol1" v-show="isTabFixed"></tab-control>
-    <scroll class="content" ref="scrollaa" :probe-type="3" :pullup-load="true" @scrollPos='scrollPos' @loadMore="loadMore">
+    <scroll class="content" ref="scroll" :probe-type="3" :pullup-load="true" @scrollPos='scrollPos' @loadMore="loadMore">
       <home-swiper :banners="banners" @swiperImgLoad="swiperImgLoad"></home-swiper>
       <home-recommends :recommends="recommends"></home-recommends>
       <home-feature></home-feature>
@@ -28,11 +28,12 @@ import HomeFeature from './homeChildren/HomeFeature'
 
 import TabControl from 'components/content/tabcontrol/TabControl'
 import HomeGoods from 'components/content/goods/HomeGoods'
-import BackTop from 'components/content/backtop/BackTop'
 
 import {homeMultiData, homeGoods} from 'network/home.js'
 
 import {debounce} from 'common/util.js'
+
+import {BackTopMixin} from 'common/mixin'
 
 export default {
   name: 'Home',
@@ -47,11 +48,13 @@ export default {
       },
       tabTitles: ['pop','new','sell'],
       currentTab: 'pop',
-      isShowBackTop: false,
       tabTop: 0,
-      isTabFixed: false
+      isTabFixed: false,
+      yWhenLeave: 0,
+      imgLoadListener: null
     }
   },
+  mixins: [BackTopMixin],
   created(){
     this.homeMultiData()
 
@@ -60,10 +63,20 @@ export default {
     this.homeGoods('sell')
   },
   mounted() {
-      const refresh = debounce(this.$refs.scrollaa.refresh, 100)
-      this.$bus.$on('imgLoad',() => {
-        refresh()
-    })
+    //可使用mixin混入
+    this.imgLoadListener = () => {
+      debounce(this.$refs.scroll.refresh, 100)
+      console.log('home img refreshed');    
+    }
+    this.$bus.$on('imgLoad', this.imgLoadListener)
+  },
+  deactivated() {
+    this.yWhenLeave = this.$refs.scroll.scroll.y
+    this.$bus.$off('imgLoad', this.imgLoadListener)
+  },
+  activated() {
+    this.$refs.scroll.scroll.scrollTo(0, this.yWhenLeave, 0)
+    this.$refs.scroll.scroll.refresh()
   },
   methods: {
     // 网络请求相关
@@ -79,7 +92,7 @@ export default {
       this.goods[type].list.push(...res.data.list)
       this.goods[type].page += 1
 
-      this.$refs.scrollaa.scroll.finishPullUp()
+      this.$refs.scroll.scroll.finishPullUp()
     })
     },
 
@@ -89,9 +102,6 @@ export default {
       this.$refs.tabcontrol1.currentIndex = index
       this.$refs.tabcontrol2.currentIndex = index
     },
-    backTop() {
-      this.$refs.scrollaa.scroll.scrollTo(0,0,500)
-    },
     scrollPos(pos) {
       //是否显示回到顶部
       this.isShowBackTop = Math.abs(pos.y) > 1000
@@ -100,6 +110,7 @@ export default {
     },
     loadMore() {
       this.homeGoods(this.currentTab)
+      this.$refs.scroll.refresh
     },
     swiperImgLoad() {
       this.tabTop = this.$refs.tabcontrol2.$el.offsetTop
@@ -114,7 +125,6 @@ export default {
     TabControl,
     HomeGoods,
     Scroll,
-    BackTop
   }
 }
 </script>
@@ -144,7 +154,7 @@ export default {
 }
 
 .content {
-  height: calc(100% - 93px);
+  /* height: calc(100% - 93px); */
   position: absolute;
   top: 44px;
   bottom: 49px;
